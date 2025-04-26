@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import QuickChatImage from '../../../public/images/QuickChat.png';
+import QuickChatIcon from '../../../public/images/QuickChaticon.png';
+import Image from 'next/image';
 import {
   AppBar,
   Avatar,
@@ -32,7 +35,6 @@ import {
   LightMode,
   DarkMode,
   MoreVert,
-  ChatBubble,
   People,
   Notifications,
   Logout,
@@ -488,9 +490,14 @@ const ChatAppHomepage = () => {
             }}
           >
             <DrawerHeader>
-              <Typography variant="h6" sx={{ ml: 2, fontWeight: 'bold' }}>
-                QuickChat
-              </Typography>
+              <Box sx={{ ml: 2, height: '40px', width: '150px', position: 'relative' }}>
+                <Image 
+                  src={QuickChatImage} 
+                  alt="QuickChat" 
+                  fill
+                  style={{ objectFit: 'contain' }}
+                />
+              </Box>
               <IconButton onClick={handleDrawerToggle}>
                 <Menu />
               </IconButton>
@@ -511,9 +518,14 @@ const ChatAppHomepage = () => {
             open
           >
             <DrawerHeader>
-              <Typography variant="h6" sx={{ ml: 2, fontWeight: 'bold' }}>
-                QuickChat
-              </Typography>
+              <Box sx={{ ml: 2, height: '40px', width: '120px', position: 'relative' }}>
+                <Image 
+                  src={QuickChatImage} 
+                  alt="QuickChat" 
+                  fill
+                  style={{ objectFit: 'contain' }}
+                />
+              </Box>
               <IconButton>
                 <MoreVert />
               </IconButton>
@@ -606,7 +618,14 @@ const ChatAppHomepage = () => {
                 textAlign: 'center',
               }}
             >
-              <ChatBubble sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
+              <Box sx={{ width: 80, height: 80, position: 'relative', mb: 2 }}>
+                <Image 
+                  src={QuickChatIcon} 
+                  alt="QuickChat Icon" 
+                  fill
+                  style={{ objectFit: 'contain' }}
+                />
+              </Box>
               <Typography variant="h5" color="text.secondary" gutterBottom>
                 Welcome to QuickChat
               </Typography>

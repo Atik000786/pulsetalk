@@ -21,9 +21,6 @@ import {
 import {
   Visibility,
   VisibilityOff,
-  Google,
-  Facebook,
-  Apple
 } from '@mui/icons-material';
 
 const GradientBackground = styled(Box)({
@@ -48,20 +45,6 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   }
 }));
 
-const SocialButton = styled(Button)(({ theme }) => ({
-  textTransform: 'none',
-  padding: theme.spacing(1.5),
-  borderRadius: '8px',
-  fontWeight: 500,
-  flex: 1,
-  minWidth: '120px',
-  [theme.breakpoints.down('sm')]: {
-    minWidth: '100px',
-    fontSize: '0.8rem',
-    padding: theme.spacing(1)
-  }
-}));
-
 const FormTextField = styled(TextField)(({ theme }) => ({
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
@@ -82,6 +65,7 @@ export default function SignUp() {
     firstName: '',
     lastName: '',
     email: '',
+    mobile: '',
     password: '',
   });
 
@@ -96,7 +80,6 @@ export default function SignUp() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Form submitted:', formData);
-    // Changed from '/chat' to '/login' to navigate to login page after submission
     router.push('/login');
   };
 
@@ -121,33 +104,9 @@ export default function SignUp() {
               </Typography>
             </Box>
 
-            <Stack direction="row" spacing={2} sx={{ width: '100%' }} useFlexGap flexWrap="wrap">
-              <SocialButton
-                variant="outlined"
-                startIcon={<Google />}
-                sx={{ color: '#DB4437', borderColor: '#DB4437' }}
-              >
-                Google
-              </SocialButton>
-              <SocialButton
-                variant="outlined"
-                startIcon={<Facebook />}
-                sx={{ color: '#4267B2', borderColor: '#4267B2' }}
-              >
-                Facebook
-              </SocialButton>
-              <SocialButton
-                variant="outlined"
-                startIcon={<Apple />}
-                sx={{ color: 'text.primary', borderColor: 'text.secondary' }}
-              >
-                Apple
-              </SocialButton>
-            </Stack>
-
             <Divider sx={{ width: '100%' }}>
               <Typography variant="body2" color="text.secondary">
-                or continue with email
+                Sign up with email
               </Typography>
             </Divider>
 
@@ -186,6 +145,22 @@ export default function SignUp() {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
+                />
+
+                <FormTextField
+                  required
+                  fullWidth
+                  id="mobile"
+                  label="Mobile Number"
+                  name="mobile"
+                  type="tel"
+                  autoComplete="tel"
+                  value={formData.mobile}
+                  onChange={handleChange}
+                  inputProps={{
+                    pattern: "[0-9]{10}",
+                    title: "Please enter a 10-digit mobile number"
+                  }}
                 />
 
                 <FormTextField

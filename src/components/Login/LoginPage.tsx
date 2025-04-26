@@ -21,18 +21,15 @@ import {
 import {
   Visibility,
   VisibilityOff,
-  Google,
-  Facebook,
-  Apple,
   Lock,
-  Email
+  Phone
 } from '@mui/icons-material';
 import NextLink from 'next/link';
 import Head from 'next/head';
 import { useRouter } from 'next/navigation';
 
 type LoginForm = {
-  email: string;
+  mobile: string;
   password: string;
   remember: boolean;
   showPassword: boolean;
@@ -46,7 +43,7 @@ const LoginPage = () => {
   const [mounted, setMounted] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [form, setForm] = useState<LoginForm>({
-    email: '',
+    mobile: '',
     password: '',
     remember: false,
     showPassword: false,
@@ -115,11 +112,11 @@ const LoginPage = () => {
     setError(null);
 
     setTimeout(() => {
-      if (form.email && form.password) {
+      if (form.mobile && form.password) {
         console.log('Login successful', form);
         router.push('/home');
       } else {
-        setError('Please enter both email and password');
+        setError('Please enter both mobile number and password');
       }
       setIsLoading(false);
     }, 1500);
@@ -259,17 +256,17 @@ const LoginPage = () => {
                   margin="normal"
                   required
                   fullWidth
-                  id="email"
-                  label="Email Address"
-                  name="email"
-                  autoComplete="email"
+                  id="mobile"
+                  label="Mobile Number"
+                  name="mobile"
+                  autoComplete="tel"
                   autoFocus
-                  value={form.email}
-                  onChange={handleChange('email')}
+                  value={form.mobile}
+                  onChange={handleChange('mobile')}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <Email fontSize={isMobile ? 'small' : 'medium'} />
+                        <Phone fontSize={isMobile ? 'small' : 'medium'} />
                       </InputAdornment>
                     ),
                   }}
@@ -355,50 +352,6 @@ const LoginPage = () => {
                 >
                   {isLoading ? 'Signing in...' : 'Sign In'}
                 </Button>
-                
-                <Divider sx={{ my: 3 }}>
-                  <Typography variant={isMobile ? 'body2' : 'body1'}>
-                    OR
-                  </Typography>
-                </Divider>
-                
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  gap: 2,
-                  mb: 3
-                }}>
-                  <IconButton
-                    aria-label="Sign in with Google"
-                    sx={{
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderRadius: 2,
-                      p: isMobile ? 1 : 1.5,
-                    }}
-                  >
-                    <Google fontSize={isMobile ? 'small' : 'medium'} color="error" />
-                  </IconButton>
-                  <IconButton
-                    aria-label="Sign in with Facebook"
-                    sx={{
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderRadius: 2,
-                      p: isMobile ? 1 : 1.5,
-                    }}
-                  >
-                    <Facebook fontSize={isMobile ? 'small' : 'medium'} color="primary" />
-                  </IconButton>
-                  <IconButton
-                    aria-label="Sign in with Apple"
-                    sx={{
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderRadius: 2,
-                      p: isMobile ? 1 : 1.5,
-                    }}
-                  >
-                    <Apple fontSize={isMobile ? 'small' : 'medium'} />
-                  </IconButton>
-                </Box>
                 
                 <Box sx={{ 
                   mt: 2, 
