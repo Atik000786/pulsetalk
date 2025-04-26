@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import NextLink from 'next/link';
 import Head from 'next/head';
+import { useRouter } from 'next/navigation';
 
 type LoginForm = {
   email: string;
@@ -40,6 +41,7 @@ type LoginForm = {
 type ThemeMode = 'light' | 'dark';
 
 const LoginPage = () => {
+  const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
@@ -115,6 +117,7 @@ const LoginPage = () => {
     setTimeout(() => {
       if (form.email && form.password) {
         console.log('Login successful', form);
+        router.push('/home');
       } else {
         setError('Please enter both email and password');
       }
@@ -404,7 +407,7 @@ const LoginPage = () => {
                 }}>
                   <Link 
                     component={NextLink}
-                    href="/register"
+                    href="/sign-up"
                     variant={isMobile ? 'body2' : 'body1'} 
                     color="primary"
                   >

@@ -22,7 +22,9 @@ import {
   InputBase,
   Paper,
   ThemeProvider,
-  createTheme
+  createTheme,
+  TextField,
+  Button
 } from '@mui/material';
 import {
   Menu,
@@ -33,7 +35,10 @@ import {
   ChatBubble,
   People,
   Notifications,
-  Logout
+  Logout,
+  Send,
+  AttachFile,
+  EmojiEmotions
 } from '@mui/icons-material';
 
 // TypeScript types
@@ -44,6 +49,13 @@ type Chat = {
   time: string;
   unread: number;
   avatar: string;
+};
+
+type Message = {
+  id: string;
+  text: string;
+  sender: 'me' | 'other';
+  time: string;
 };
 
 type ThemeMode = 'light' | 'dark';
@@ -84,6 +96,84 @@ const chats: Chat[] = [
   },
 ];
 
+// Sample messages for each chat
+const chatMessages: Record<string, Message[]> = {
+  '1': [
+    {
+      id: '1-1',
+      text: 'Hey there!',
+      sender: 'other',
+      time: '10:20 AM'
+    },
+    {
+      id: '1-2',
+      text: 'How are you doing?',
+      sender: 'other',
+      time: '10:21 AM'
+    },
+    {
+      id: '1-3',
+      text: "I'm good, thanks! How about you?",
+      sender: 'me',
+      time: '10:25 AM'
+    },
+    {
+      id: '1-4',
+      text: 'Hey, how about meeting tomorrow?',
+      sender: 'other',
+      time: '10:30 AM'
+    }
+  ],
+  '2': [
+    {
+      id: '2-1',
+      text: 'Hi Sarah, did you finish the designs?',
+      sender: 'me',
+      time: '9:00 AM'
+    },
+    {
+      id: '2-2',
+      text: 'Yes, I just sent them to you',
+      sender: 'other',
+      time: '9:15 AM'
+    },
+    {
+      id: '2-3',
+      text: 'I sent you the design files',
+      sender: 'other',
+      time: '9:15 AM'
+    }
+  ],
+  '3': [
+    {
+      id: '3-1',
+      text: 'Team standup at 10am',
+      sender: 'other',
+      time: 'Yesterday'
+    },
+    {
+      id: '3-2',
+      text: "I'll be there",
+      sender: 'me',
+      time: 'Yesterday'
+    },
+    {
+      id: '3-3',
+      text: 'I finished the API integration',
+      sender: 'other',
+      time: 'Yesterday'
+    }
+  ],
+  '4': [
+    {
+      id: '4-1',
+      text: 'Call me when you get home',
+      sender: 'other',
+      time: '04/20/23'
+    }
+  ]
+};
+
 // Custom styled components
 const SearchBar = styled(Paper)(({ theme }) => ({
   padding: '2px 4px',
@@ -110,6 +200,15 @@ const DrawerHeader = styled('div')(({ theme }) => ({
   padding: theme.spacing(0, 1),
   ...theme.mixins.toolbar,
   justifyContent: 'space-between',
+}));
+
+const MessageInputContainer = styled(Paper)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  padding: '8px 16px',
+  borderRadius: theme.shape.borderRadius * 2,
+  backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#f5f5f5',
+  marginTop: theme.spacing(2),
 }));
 
 // Sidebar component
@@ -221,12 +320,53 @@ const SidebarContent = React.memo(({
 
 SidebarContent.displayName = 'SidebarContent';
 
+// Message component
+const Message = ({ message }: { message: Message }) => {
+  const theme = useTheme();
+  
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: message.sender === 'me' ? 'flex-end' : 'flex-start',
+        mb: 2,
+      }}
+    >
+      <Box
+        sx={{
+          maxWidth: '70%',
+          p: 1.5,
+          borderRadius: 4,
+          backgroundColor: message.sender === 'me' 
+            ? theme.palette.primary.main 
+            : (theme.palette.mode === 'dark' ? '#333' : '#e5e5ea'),
+          color: message.sender === 'me' ? '#fff' : theme.palette.text.primary,
+        }}
+      >
+        <Typography variant="body1">{message.text}</Typography>
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            display: 'block', 
+            textAlign: 'right',
+            color: message.sender === 'me' ? 'rgba(255,255,255,0.7)' : 'text.secondary'
+          }}
+        >
+          {message.time}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
 // Main component
 const ChatAppHomepage = () => {
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<Record<string, Message[]>>(chatMessages);
 
   const theme = createTheme({
     palette: {
@@ -252,10 +392,42 @@ const ChatAppHomepage = () => {
     setThemeMode(prevMode => prevMode === 'light' ? 'dark' : 'light');
   };
 
+  const handleSendMessage = () => {
+    if (message.trim() === '' || !selectedChat) return;
+
+    const newMessage: Message = {
+      id: `${selectedChat}-${Date.now()}`,
+      text: message,
+      sender: 'me',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages(prev => ({
+      ...prev,
+      [selectedChat]: [...(prev[selectedChat] || []), newMessage]
+    }));
+
+    // Update last message in chats
+    const chatIndex = chats.findIndex(c => c.id === selectedChat);
+    if (chatIndex !== -1) {
+      chats[chatIndex].lastMessage = message;
+      chats[chatIndex].time = 'Just now';
+    }
+
+    setMessage('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   const drawerWidth = 340;
 
   if (!mounted) {
-    return null; // or return a loading spinner
+    return null;
   }
 
   return (
@@ -375,11 +547,53 @@ const ChatAppHomepage = () => {
                 height: 'calc(100vh - 64px)',
               }}
             >
-              <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="h5" color="text.secondary">
-                  {chats.find(c => c.id === selectedChat)?.name}'s chat
-                </Typography>
+              {/* Messages area */}
+              <Box 
+                sx={{ 
+                  flexGrow: 1, 
+                  overflowY: 'auto',
+                  p: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {(messages[selectedChat] || []).map((msg) => (
+                  <Message key={msg.id} message={msg} />
+                ))}
               </Box>
+              
+              {/* Message input area */}
+              <MessageInputContainer elevation={1}>
+                <IconButton>
+                  <AttachFile />
+                </IconButton>
+                <IconButton>
+                  <EmojiEmotions />
+                </IconButton>
+                <TextField
+                  fullWidth
+                  variant="standard"
+                  placeholder="Type a message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  sx={{
+                    mx: 1,
+                    '& .MuiInputBase-root': {
+                      padding: '8px 0',
+                    },
+                  }}
+                  multiline
+                  maxRows={4}
+                />
+                <IconButton 
+                  color="primary" 
+                  onClick={handleSendMessage}
+                  disabled={!message.trim()}
+                >
+                  <Send />
+                </IconButton>
+              </MessageInputContainer>
             </Box>
           ) : (
             <Box
