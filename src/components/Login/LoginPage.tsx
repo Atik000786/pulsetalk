@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
@@ -9,14 +10,17 @@ import {
   FormControlLabel,
   Link,
   Paper,
-  TextField,
   Typography,
   ThemeProvider,
   createTheme,
   InputAdornment,
   IconButton,
   Divider,
-  Alert
+  Alert,
+  Container,
+  Stack,
+  styled,
+  useTheme
 } from '@mui/material';
 import {
   Visibility,
@@ -26,44 +30,102 @@ import {
 } from '@mui/icons-material';
 import NextLink from 'next/link';
 import Head from 'next/head';
-import { useRouter } from 'next/navigation';
-
-type LoginForm = {
-  mobile: string;
-  password: string;
-  remember: boolean;
-  showPassword: boolean;
-};
+import * as Yup from "yup";
+import { useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "@/redux/store";
+import toast from "react-hot-toast";
+import FormProvider from "@/components/hook-form/FormProvider";
+import RHFTextField from "@/components/hook-form/RHFTextField";
+import { LoadingButton } from "@mui/lab";
+import { loginAsync } from '@/redux/services/user';
 
 type ThemeMode = 'light' | 'dark';
 
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(4),
+  borderRadius: '16px',
+  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+  width: '100%',
+  maxWidth: '500px',
+  backdropFilter: 'blur(8px)',
+  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(3)
+  }
+}));
+
+const LoginSchema = Yup.object().shape({
+  mobile: Yup.string()
+    .required('Mobile number is required')
+    .matches(/^[0-9]{10}$/, 'Mobile number must be 10 digits')
+    .trim(),
+  password: Yup.string()
+    .required('Password is required')
+    .min(8, 'Password must be at least 8 characters'),
+  remember: Yup.boolean()
+});
+
 const LoginPage = () => {
   const router = useRouter();
-  const [isMobile, setIsMobile] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const theme = useTheme();
+  const dispatch: AppDispatch = useDispatch();
+  const { isLoading } = useSelector((state: RootState) => state.users);
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
-  const [form, setForm] = useState<LoginForm>({
-    mobile: '',
-    password: '',
-    remember: false,
-    showPassword: false,
+  const [showPassword, setShowPassword] = useState(false);
+
+  const defaultValues = useMemo(
+    () => ({
+      mobile: '',
+      password: '',
+      remember: false,
+    }),
+    []
+  );
+
+  const methods = useForm({
+    resolver: yupResolver(LoginSchema),
+    defaultValues,
   });
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-    setIsMobile(window.innerWidth < 600);
-    
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 600);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { handleSubmit, reset } = methods;
 
-  const theme = createTheme({
+  const onSubmit = async (formData: any) => {
+    try {
+      const requestData = {
+        mobile: formData.mobile.trim(),
+        password: formData.password,
+        remember: formData.remember
+      };
+
+      const response = await dispatch(loginAsync(requestData));
+      
+      if (loginAsync.fulfilled.match(response)) {
+        // Store auth token and user data in localStorage
+        if (response.payload.data?.token) {
+          localStorage.setItem('authToken', response.payload.data.token);
+          
+          if (response.payload.data?.user) {
+            localStorage.setItem('userData', JSON.stringify(response.payload.data.user));
+          }
+          
+          // Store remember me preference
+          localStorage.setItem('rememberMe', formData.remember.toString());
+        }
+
+        toast.success('Login successful!');
+        router.push('/home');
+      } else if (loginAsync.rejected.match(response)) {
+        const errorMessage =  'Login failed';
+        toast.error(errorMessage);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'An error occurred during login');
+    }
+  };
+
+  const muiTheme = createTheme({
     palette: {
       mode: themeMode,
       primary: {
@@ -80,61 +142,7 @@ const LoginPage = () => {
     shape: {
       borderRadius: 12,
     },
-    components: {
-      MuiTextField: {
-        defaultProps: {
-          size: isMobile ? 'small' : 'medium',
-        },
-      },
-      MuiButton: {
-        defaultProps: {
-          size: isMobile ? 'medium' : 'large',
-        },
-      },
-    },
   });
-
-  const handleChange = (prop: keyof LoginForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (prop === 'remember') {
-      setForm({ ...form, [prop]: event.target.checked });
-    } else {
-      setForm({ ...form, [prop]: event.target.value });
-    }
-  };
-
-  const handleClickShowPassword = () => {
-    setForm({ ...form, showPassword: !form.showPassword });
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    setTimeout(() => {
-      if (form.mobile && form.password) {
-        console.log('Login successful', form);
-        router.push('/home');
-      } else {
-        setError('Please enter both mobile number and password');
-      }
-      setIsLoading(false);
-    }, 1500);
-  };
-
-  if (!mounted) {
-    // Return a basic skeleton during SSR
-    return (
-      <>
-        <Head>
-          <title>QuickChat | Login</title>
-          <meta name="description" content="Login to QuickChat - Modern messaging app" />
-          <meta name="viewport" content="initial-scale=1, width=device-width" />
-        </Head>
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }} />
-      </>
-    );
-  }
 
   return (
     <>
@@ -144,14 +152,15 @@ const LoginPage = () => {
         <meta name="viewport" content="initial-scale=1, width=device-width" />
       </Head>
       
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={muiTheme}>
         <CssBaseline />
         <Box 
           component="main" 
           sx={{ 
             minHeight: '100vh',
             display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' }
+            flexDirection: { xs: 'column', sm: 'row' },
+            backgroundColor: themeMode === 'light' ? '#f5f5f5' : '#121212'
           }}
         >
           {/* Branding Panel - Hidden on mobile */}
@@ -176,18 +185,18 @@ const LoginPage = () => {
               px: 4
             }}>
               <Lock sx={{ 
-                fontSize: isMobile ? 60 : 80, 
+                fontSize: 80, 
                 mb: 2 
               }} />
               <Typography 
-                variant={isMobile ? 'h4' : 'h3'} 
+                variant="h3" 
                 component="h1" 
                 gutterBottom 
                 sx={{ fontWeight: 'bold' }}
               >
                 Welcome to QuickChat
               </Typography>
-              <Typography variant={isMobile ? 'body1' : 'h6'}>
+              <Typography variant="h6">
                 Connect with friends and colleagues in real-time
               </Typography>
             </Box>
@@ -200,175 +209,141 @@ const LoginPage = () => {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              backgroundColor: theme.palette.background.paper,
-              p: isMobile ? 2 : 4,
+              backgroundColor: muiTheme.palette.background.paper,
+              p: 4,
             }}
             component={Paper}
-            elevation={isMobile ? 0 : 6}
-            square={isMobile}
+            elevation={6}
           >
-            <Box
-              sx={{
-                width: '100%',
-                maxWidth: 400,
-                mx: 'auto',
-                my: isMobile ? 2 : 8,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-              }}
-            >
-              <Typography 
-                component="h1" 
-                variant={isMobile ? 'h5' : 'h4'} 
-                sx={{ 
-                  mb: 2, 
-                  fontWeight: 'bold',
-                  textAlign: 'center'
-                }}
-              >
-                Sign in to QuickChat
-              </Typography>
-              
-              {error && (
-                <Alert 
-                  severity="error" 
-                  sx={{ 
-                    width: '100%', 
-                    mb: 2,
-                    fontSize: isMobile ? '0.875rem' : '1rem'
-                  }}
-                >
-                  {error}
-                </Alert>
-              )}
-              
-              <Box
-                component="form"
-                noValidate
-                onSubmit={handleSubmit}
-                sx={{ 
-                  width: '100%',
-                  mt: 1,
-                }}
-              >
-                <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  id="mobile"
-                  label="Mobile Number"
-                  name="mobile"
-                  autoComplete="tel"
-                  autoFocus
-                  value={form.mobile}
-                  onChange={handleChange('mobile')}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Phone fontSize={isMobile ? 'small' : 'medium'} />
-                      </InputAdornment>
-                    ),
-                  }}
-                  variant="outlined"
-                  sx={{ mb: 1.5 }}
-                />
-                <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  name="password"
-                  label="Password"
-                  type={form.showPassword ? 'text' : 'password'}
-                  id="password"
-                  autoComplete="current-password"
-                  value={form.password}
-                  onChange={handleChange('password')}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Lock fontSize={isMobile ? 'small' : 'medium'} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label="toggle password visibility"
-                          onClick={handleClickShowPassword}
-                          edge="end"
-                          size={isMobile ? 'small' : 'medium'}
-                        >
-                          {form.showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                  variant="outlined"
-                  sx={{ mb: 1.5 }}
-                />
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  flexWrap: 'wrap'
-                }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={form.remember}
-                        onChange={handleChange('remember')}
-                        color="primary"
-                        size={isMobile ? 'small' : 'medium'}
+            <Container component="main" maxWidth="sm" sx={{ padding: 0 }}>
+              <StyledPaper elevation={3}>
+                <Stack spacing={3}>
+                  <Box textAlign="center">
+                    <Typography component="h1" variant="h4" sx={{ 
+                      fontWeight: 700, 
+                      mb: 1,
+                      background: 'linear-gradient(90deg, #3f51b5, #2196f3)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent'
+                    }}>
+                      Sign in to QuickChat
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Connect with your friends and colleagues
+                    </Typography>
+                  </Box>
+
+                  <Divider sx={{ width: '100%' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Sign in with Mobile Number
+                    </Typography>
+                  </Divider>
+
+                  <FormProvider methods={methods} onSubmit={handleSubmit(onSubmit)}>
+                    <Stack spacing={2}>
+                      <RHFTextField
+                        name="mobile"
+                        label="Mobile Number"
+                        fullWidth
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Phone />
+                            </InputAdornment>
+                          ),
+                          inputProps: {
+                            maxLength: 10,
+                            pattern: "[0-9]{10}",
+                          }
+                        }}
                       />
-                    }
-                    label={
-                      <Typography variant={isMobile ? 'body2' : 'body1'}>
-                        Remember me
+
+                      <RHFTextField
+                        name="password"
+                        label="Password"
+                        type={showPassword ? 'text' : 'password'}
+                        fullWidth
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Lock />
+                            </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                aria-label="toggle password visibility"
+                                onClick={() => setShowPassword(!showPassword)}
+                                edge="end"
+                              >
+                                {showPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        flexWrap: 'wrap'
+                      }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              name="remember"
+                              color="primary"
+                            />
+                          }
+                          label="Remember me"
+                        />
+                        <Link 
+                          component={NextLink}
+                          href="/forgot-password"
+                          variant="body2"
+                          color="primary"
+                        >
+                          Forgot password?
+                        </Link>
+                      </Box>
+
+                      <LoadingButton
+                        type="submit"
+                        fullWidth
+                        variant="contained"
+                        size="large"
+                        loading={isLoading}
+                        sx={{
+                          mt: 2,
+                          py: 1.5,
+                          borderRadius: '8px',
+                          background: 'linear-gradient(90deg, #3f51b5, #2196f3)',
+                          '&:hover': {
+                            background: 'linear-gradient(90deg, #3949ab, #1976d2)',
+                          },
+                        }}
+                      >
+                        Sign In
+                      </LoadingButton>
+
+                      <Typography variant="body2" color="text.secondary" textAlign="center" mt={1}>
+                        Don't have an account?{' '}
+                        <Link 
+                          component={NextLink}
+                          href="/sign-up"
+                          underline="hover" 
+                          color="primary.main" 
+                          fontWeight={500}
+                        >
+                          Sign up
+                        </Link>
                       </Typography>
-                    }
-                    sx={{ mb: isMobile ? 1 : 0 }}
-                  />
-                  <Link 
-                    component={NextLink}
-                    href="/forgot-password"
-                    variant="body1"
-                    color="primary"
-                  >
-                    Forgot password?
-                  </Link>
-                </Box>
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  sx={{ 
-                    mt: 3, 
-                    mb: 2, 
-                    py: isMobile ? 1 : 1.5, 
-                    borderRadius: 2,
-                    fontSize: isMobile ? '0.875rem' : '1rem'
-                  }}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Signing in...' : 'Sign In'}
-                </Button>
-                
-                <Box sx={{ 
-                  mt: 2, 
-                  textAlign: 'center',
-                  fontSize: isMobile ? '0.875rem' : '1rem'
-                }}>
-                  <Link 
-                    component={NextLink}
-                    href="/sign-up"
-                    variant={isMobile ? 'body2' : 'body1'} 
-                    color="primary"
-                  >
-                    Don't have an account? Sign Up
-                  </Link>
-                </Box>
-              </Box>
-            </Box>
+                    </Stack>
+                  </FormProvider>
+                </Stack>
+              </StyledPaper>
+            </Container>
           </Box>
         </Box>
       </ThemeProvider>

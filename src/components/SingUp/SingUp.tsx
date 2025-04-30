@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -8,7 +8,6 @@ import {
   Container,
   CssBaseline,
   Stack,
-  TextField,
   Typography,
   InputAdornment,
   IconButton,
@@ -22,6 +21,16 @@ import {
   Visibility,
   VisibilityOff,
 } from '@mui/icons-material';
+import FormProvider from "@/components/hook-form/FormProvider";
+import * as Yup from "yup";
+import { useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "@/redux/store";
+import toast from "react-hot-toast";
+import RHFTextField from "@/components/hook-form/RHFTextField";
+import { LoadingButton } from "@mui/lab";
+import { signUpAsync } from "@/redux/services/user";
 
 const GradientBackground = styled(Box)({
   minHeight: '100vh',
@@ -45,47 +54,87 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   }
 }));
 
-const FormTextField = styled(TextField)(({ theme }) => ({
-  '& .MuiOutlinedInput-root': {
-    borderRadius: '8px',
-    '& fieldset': {
-      borderColor: theme.palette.divider
-    },
-    '&:hover fieldset': {
-      borderColor: theme.palette.primary.main
-    }
-  }
-}));
+// In SignUp.tsx
+const SignUpSchema = Yup.object().shape({
+  firstName: Yup.string()
+    .required('First name is required')
+    .trim()
+    .matches(/^[a-zA-Z]+$/, 'First name can only contain letters'),
+  lastName: Yup.string()
+    .required('Last name is required')
+    .trim()
+    .matches(/^[a-zA-Z]+$/, 'Last name can only contain letters'),
+  email: Yup.string()
+    .required('Email is required')
+    .email('Invalid email format')
+    .trim()
+    .lowercase(),
+  mobile: Yup.string()
+    .required('Mobile number is required')
+    .matches(/^[0-9]{10}$/, 'Mobile number must be 10 digits')
+    .trim(),
+  password: Yup.string()
+    .required('Password is required')
+    .min(8, 'Password must be at least 8 characters')
+});
 
 export default function SignUp() {
   const router = useRouter();
   const theme = useTheme();
+  const { isSubmitting, error } = useSelector((state: RootState) => state.users);
+  const dispatch: AppDispatch = useDispatch();
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    mobile: '',
-    password: '',
+
+  const defaultValues = useMemo(
+    () => ({
+      firstName: '',
+      lastName: '',
+      email: '',
+      mobile: '',
+      password: '',
+    }),
+    []
+  );
+
+  const methods = useForm({
+    resolver: yupResolver(SignUpSchema),
+    defaultValues,
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  const { handleSubmit, reset } = methods;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Form submitted:', formData);
-    router.push('/login');
-  };
+ const onSubmit = async (formData: any) => {
+  try {
+    // Prepare data exactly as server expects
+    const requestData = {
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      mobile: formData.mobile.trim(),
+      password: formData.password // No trim here as passwords might contain spaces
+    };
+
+    console.log("Sending data:", requestData); // For debugging
+
+    const response = await dispatch(signUpAsync(requestData));
+    
+    if (response.meta.requestStatus === 'fulfilled') {
+      toast.success('Account created successfully!');
+      reset();
+      router.push('/login');
+    } else if (response.meta.requestStatus === 'rejected') {
+      const errorMessage = response.payload?.message || 'Sign up failed';
+      toast.error(errorMessage);
+    }
+  } catch (error: any) {
+    toast.error(error.message || 'An error occurred during sign up');
+  }
+};
 
   return (
     <GradientBackground>
       <Container component="main" maxWidth="sm" sx={{ padding: 0 }}>
+
         <CssBaseline />
         <StyledPaper elevation={3}>
           <Stack spacing={3}>
@@ -106,73 +155,47 @@ export default function SignUp() {
 
             <Divider sx={{ width: '100%' }}>
               <Typography variant="body2" color="text.secondary">
-                Sign up with email
+                Sign up with Mobile Number
               </Typography>
             </Divider>
 
-            <Box component="form" onSubmit={handleSubmit}>
+            <FormProvider methods={methods} onSubmit={handleSubmit(onSubmit)}>
               <Stack spacing={2}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                  <FormTextField
-                    autoComplete="given-name"
+                  <RHFTextField
                     name="firstName"
-                    required
-                    fullWidth
-                    id="firstName"
                     label="First Name"
                     autoFocus
-                    value={formData.firstName}
-                    onChange={handleChange}
-                  />
-                  <FormTextField
-                    required
                     fullWidth
-                    id="lastName"
-                    label="Last Name"
+                  />
+                  <RHFTextField
                     name="lastName"
-                    autoComplete="family-name"
-                    value={formData.lastName}
-                    onChange={handleChange}
+                    label="Last Name"
+                    fullWidth
                   />
                 </Stack>
 
-                <FormTextField
-                  required
-                  fullWidth
-                  id="email"
-                  label="Email Address"
+                <RHFTextField
                   name="email"
-                  autoComplete="email"
-                  value={formData.email}
-                  onChange={handleChange}
+                  label="Email Address"
+                  fullWidth
                 />
 
-                <FormTextField
-                  required
-                  fullWidth
-                  id="mobile"
-                  label="Mobile Number"
+                <RHFTextField
                   name="mobile"
-                  type="tel"
-                  autoComplete="tel"
-                  value={formData.mobile}
-                  onChange={handleChange}
+                  label="Mobile Number"
+                  fullWidth
                   inputProps={{
+                    maxLength: 10,
                     pattern: "[0-9]{10}",
-                    title: "Please enter a 10-digit mobile number"
                   }}
                 />
 
-                <FormTextField
-                  required
-                  fullWidth
+                <RHFTextField
                   name="password"
                   label="Password"
                   type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  autoComplete="new-password"
-                  value={formData.password}
-                  onChange={handleChange}
+                  fullWidth
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
@@ -188,11 +211,12 @@ export default function SignUp() {
                   }}
                 />
 
-                <Button
+                <LoadingButton
                   type="submit"
                   fullWidth
                   variant="contained"
                   size="large"
+                  loading={isSubmitting}
                   sx={{
                     mt: 2,
                     py: 1.5,
@@ -204,7 +228,7 @@ export default function SignUp() {
                   }}
                 >
                   Create Account
-                </Button>
+                </LoadingButton>
 
                 <Typography variant="body2" color="text.secondary" textAlign="center" mt={1}>
                   Already have an account?{' '}
@@ -213,7 +237,7 @@ export default function SignUp() {
                   </Link>
                 </Typography>
               </Stack>
-            </Box>
+            </FormProvider>
           </Stack>
         </StyledPaper>
       </Container>

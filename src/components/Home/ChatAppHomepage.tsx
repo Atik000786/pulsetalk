@@ -431,7 +431,8 @@ const ChatAppHomepage = () => {
   if (!mounted) {
     return null;
   }
-
+  
+  
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex' }}>
