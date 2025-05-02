@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { loginAsync, signUpAsync } from "../services/user";
+import { getAllUserAsync, loginAsync, signUpAsync } from "../services/user";
 
 interface User {
   _id: string;
@@ -58,6 +58,19 @@ const usersSlice = createSlice({
         state.user = action.payload;
       })
       .addCase(loginAsync.rejected, (state, action) => {  // Fixed: Changed from signUpAsync.rejected to loginAsync.rejected
+        state.isSubmitting = false;
+        state.error = action.payload as ErrorResponse;
+      })
+      // get all user
+       .addCase(getAllUserAsync.pending, (state) => {
+        state.isSubmitting = true;
+        state.error = null;
+      })
+      .addCase(getAllUserAsync.fulfilled, (state, action) => {
+        state.isSubmitting = false;
+        state.user = action.payload;
+      })
+      .addCase(getAllUserAsync.rejected, (state, action) => {  // Fixed: Changed from signUpAsync.rejected to loginAsync.rejected
         state.isSubmitting = false;
         state.error = action.payload as ErrorResponse;
       });

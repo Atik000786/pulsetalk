@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import QuickChatImage from '../../../public/images/QuickChat.png';
 import QuickChatIcon from '../../../public/images/QuickChaticon.png';
 import Image from 'next/image';
@@ -9,25 +10,27 @@ import {
   Avatar,
   Badge,
   Box,
+  Container,
   CssBaseline,
+  Stack,
+  Typography,
   Divider,
-  Drawer,
+  Paper,
+  styled,
+  useTheme,
   IconButton,
+  InputBase,
+  TextField,
+  Button,
+  Toolbar,
   List,
   ListItem,
   ListItemAvatar,
   ListItemButton,
   ListItemText,
-  Toolbar,
-  Typography,
-  styled,
-  useTheme,
-  InputBase,
-  Paper,
+  Drawer,
   ThemeProvider,
-  createTheme,
-  TextField,
-  Button
+  createTheme
 } from '@mui/material';
 import {
   Menu,
@@ -42,8 +45,39 @@ import {
   AttachFile,
   EmojiEmotions
 } from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+import type { AppDispatch, RootState } from '@/redux/store';
+import { getAllUserAsync } from '@/redux/services/user';
+import { LoadingButton } from '@mui/lab';
+import toast from 'react-hot-toast';
+import React from 'react';
 
 // TypeScript types
+type User = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobile: string;
+  isEmailVerified: boolean;
+  isMobileVerified: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
+};
+
+type ApiResponse = {
+  success: boolean;
+  status: number;
+  message: string;
+  data: {
+    users: User[];
+    hasMore: boolean;
+    lastId?: string;
+  };
+};
+
 type Chat = {
   id: string;
   name: string;
@@ -62,130 +96,46 @@ type Message = {
 
 type ThemeMode = 'light' | 'dark';
 
-// Sample data
-const chats: Chat[] = [
-  {
-    id: '1',
-    name: 'Alex Johnson',
-    lastMessage: 'Hey, how about meeting tomorrow?',
-    time: '10:30 AM',
-    unread: 2,
-    avatar: 'https://i.pravatar.cc/150?img=1'
+const getDesignTokens = (mode: ThemeMode) => ({
+  palette: {
+    mode,
+    ...(mode === 'light'
+      ? {
+          // Light mode palette
+          primary: {
+            main: '#1976d2',
+          },
+          secondary: {
+            main: '#9c27b0',
+          },
+          background: {
+            default: '#fafafa',
+            paper: '#ffffff',
+          },
+          text: {
+            primary: 'rgba(0, 0, 0, 0.87)',
+            secondary: 'rgba(0, 0, 0, 0.6)',
+          },
+        }
+      : {
+          // Dark mode palette
+          primary: {
+            main: '#90caf9',
+          },
+          secondary: {
+            main: '#ce93d8',
+          },
+          background: {
+            default: '#121212',
+            paper: '#1e1e1e',
+          },
+          text: {
+            primary: '#ffffff',
+            secondary: 'rgba(255, 255, 255, 0.7)',
+          },
+        }),
   },
-  {
-    id: '2',
-    name: 'Sarah Williams',
-    lastMessage: 'I sent you the design files',
-    time: 'Yesterday',
-    unread: 0,
-    avatar: 'https://i.pravatar.cc/150?img=5'
-  },
-  {
-    id: '3',
-    name: 'Team Standup',
-    lastMessage: 'Michael: I finished the API integration',
-    time: 'Yesterday',
-    unread: 5,
-    avatar: 'https://i.pravatar.cc/150?img=9'
-  },
-  {
-    id: '4',
-    name: 'Mom',
-    lastMessage: 'Call me when you get home',
-    time: '04/20/23',
-    unread: 0,
-    avatar: 'https://i.pravatar.cc/150?img=11'
-  },
-];
-
-// Sample messages for each chat
-const chatMessages: Record<string, Message[]> = {
-  '1': [
-    {
-      id: '1-1',
-      text: 'Hey there!',
-      sender: 'other',
-      time: '10:20 AM'
-    },
-    {
-      id: '1-2',
-      text: 'How are you doing?',
-      sender: 'other',
-      time: '10:21 AM'
-    },
-    {
-      id: '1-3',
-      text: "I'm good, thanks! How about you?",
-      sender: 'me',
-      time: '10:25 AM'
-    },
-    {
-      id: '1-4',
-      text: 'Hey, how about meeting tomorrow?',
-      sender: 'other',
-      time: '10:30 AM'
-    }
-  ],
-  '2': [
-    {
-      id: '2-1',
-      text: 'Hi Sarah, did you finish the designs?',
-      sender: 'me',
-      time: '9:00 AM'
-    },
-    {
-      id: '2-2',
-      text: 'Yes, I just sent them to you',
-      sender: 'other',
-      time: '9:15 AM'
-    },
-    {
-      id: '2-3',
-      text: 'I sent you the design files',
-      sender: 'other',
-      time: '9:15 AM'
-    }
-  ],
-  '3': [
-    {
-      id: '3-1',
-      text: 'Team standup at 10am',
-      sender: 'other',
-      time: 'Yesterday'
-    },
-    {
-      id: '3-2',
-      text: "I'll be there",
-      sender: 'me',
-      time: 'Yesterday'
-    },
-    {
-      id: '3-3',
-      text: 'I finished the API integration',
-      sender: 'other',
-      time: 'Yesterday'
-    }
-  ],
-  '4': [
-    {
-      id: '4-1',
-      text: 'Call me when you get home',
-      sender: 'other',
-      time: '04/20/23'
-    }
-  ]
-};
-
-// Custom styled components
-const SearchBar = styled(Paper)(({ theme }) => ({
-  padding: '2px 4px',
-  display: 'flex',
-  alignItems: 'center',
-  borderRadius: theme.shape.borderRadius,
-  backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#f5f5f5',
-  margin: theme.spacing(2),
-  width: '100%',
-}));
+});
 
 const StyledBadge = styled(Badge)(({ theme }) => ({
   '& .MuiBadge-badge': {
@@ -194,14 +144,6 @@ const StyledBadge = styled(Badge)(({ theme }) => ({
     border: `2px solid ${theme.palette.background.paper}`,
     padding: '0 4px',
   },
-}));
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  padding: theme.spacing(0, 1),
-  ...theme.mixins.toolbar,
-  justifyContent: 'space-between',
 }));
 
 const MessageInputContainer = styled(Paper)(({ theme }) => ({
@@ -213,7 +155,44 @@ const MessageInputContainer = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(2),
 }));
 
-// Sidebar component
+const Message = ({ message }: { message: Message }) => {
+  const theme = useTheme();
+  
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: message.sender === 'me' ? 'flex-end' : 'flex-start',
+        mb: 2,
+      }}
+    >
+      <Box
+        sx={{
+        maxWidth: '70%',
+        p: 1.5,
+        borderRadius: 4,
+        backgroundColor: message.sender === 'me' 
+          ? theme.palette.primary.main 
+          : (theme.palette.mode === 'dark' ? '#333' : '#e5e5ea'),
+        color: message.sender === 'me' ? '#fff' : theme.palette.text.primary,
+        }}
+      >
+        <Typography variant="body1">{message.text}</Typography>
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            display: 'block', 
+            textAlign: 'right',
+            color: message.sender === 'me' ? 'rgba(255,255,255,0.7)' : 'text.secondary'
+          }}
+        >
+          {message.time}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
 const SidebarContent = React.memo(({
   chats,
   selectedChat,
@@ -227,7 +206,15 @@ const SidebarContent = React.memo(({
 
   return (
     <Box sx={{ overflow: 'auto' }}>
-      <SearchBar elevation={0}>
+      <Paper elevation={0} sx={{
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        borderRadius: theme.shape.borderRadius,
+        backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#f5f5f5',
+        margin: theme.spacing(2),
+        width: '100%',
+      }}>
         <IconButton sx={{ p: '10px' }} aria-label="search">
           <Search />
         </IconButton>
@@ -236,7 +223,7 @@ const SidebarContent = React.memo(({
           placeholder="Search chats..."
           inputProps={{ 'aria-label': 'search chats' }}
         />
-      </SearchBar>
+      </Paper>
       
       <List>
         {chats.map((chat) => (
@@ -322,77 +309,66 @@ const SidebarContent = React.memo(({
 
 SidebarContent.displayName = 'SidebarContent';
 
-// Message component
-const Message = ({ message }: { message: Message }) => {
-  const theme = useTheme();
-  
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: message.sender === 'me' ? 'flex-end' : 'flex-start',
-        mb: 2,
-      }}
-    >
-      <Box
-        sx={{
-          maxWidth: '70%',
-          p: 1.5,
-          borderRadius: 4,
-          backgroundColor: message.sender === 'me' 
-            ? theme.palette.primary.main 
-            : (theme.palette.mode === 'dark' ? '#333' : '#e5e5ea'),
-          color: message.sender === 'me' ? '#fff' : theme.palette.text.primary,
-        }}
-      >
-        <Typography variant="body1">{message.text}</Typography>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            display: 'block', 
-            textAlign: 'right',
-            color: message.sender === 'me' ? 'rgba(255,255,255,0.7)' : 'text.secondary'
-          }}
-        >
-          {message.time}
-        </Typography>
-      </Box>
-    </Box>
-  );
-};
-
-// Main component
-const ChatAppHomepage = () => {
+export default function ChatAppHomepage() {
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Record<string, Message[]>>(chatMessages);
+  const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [chats, setChats] = useState<Chat[]>([]);
+  
+  const router = useRouter();
+  const dispatch: AppDispatch = useDispatch();
+  const { isLoading, error } = useSelector((state: RootState) => state.users);
+  const usersData = useSelector((state: RootState) => state.users.user) as ApiResponse | null;
 
-  const theme = createTheme({
-    palette: {
-      mode: themeMode,
-      primary: {
-        main: '#3f51b5',
-      },
-      secondary: {
-        main: '#f50057',
-      },
-    },
-  });
+  // Create theme based on themeMode
+  const theme = useMemo(() => createTheme(getDesignTokens(themeMode)), [themeMode]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    // Fetch all users when component mounts
+    dispatch(getAllUserAsync({}));
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (usersData?.success && usersData.data?.users) {
+      // Transform the users into chat format
+      const transformedChats = usersData.data.users.map((user) => ({
+        id: user._id,
+        name: `${user.firstName} ${user.lastName}`,
+        lastMessage: '',
+        time: '',
+        unread: 0,
+        avatar: `https://i.pravatar.cc/150?u=${user.email}`
+      }));
+      setChats(transformedChats);
+    }
+  }, [usersData]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
   const toggleThemeMode = () => {
-    setThemeMode(prevMode => prevMode === 'light' ? 'dark' : 'light');
+    setThemeMode(prevMode => {
+      const newMode = prevMode === 'light' ? 'dark' : 'light';
+      // Optional: Save to localStorage for persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('themeMode', newMode);
+      }
+      return newMode;
+    });
   };
+
+  // Check for saved theme preference on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('themeMode') as ThemeMode;
+      if (savedTheme) {
+        setThemeMode(savedTheme);
+      }
+    }
+  }, []);
 
   const handleSendMessage = () => {
     if (message.trim() === '' || !selectedChat) return;
@@ -412,8 +388,13 @@ const ChatAppHomepage = () => {
     // Update last message in chats
     const chatIndex = chats.findIndex(c => c.id === selectedChat);
     if (chatIndex !== -1) {
-      chats[chatIndex].lastMessage = message;
-      chats[chatIndex].time = 'Just now';
+      const updatedChats = [...chats];
+      updatedChats[chatIndex] = {
+        ...updatedChats[chatIndex],
+        lastMessage: message,
+        time: 'Just now'
+      };
+      setChats(updatedChats);
     }
 
     setMessage('');
@@ -428,11 +409,6 @@ const ChatAppHomepage = () => {
 
   const drawerWidth = 340;
 
-  if (!mounted) {
-    return null;
-  }
-  
-  
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex' }}>
@@ -490,7 +466,13 @@ const ChatAppHomepage = () => {
               '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
             }}
           >
-            <DrawerHeader>
+            <Box sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              padding: theme.spacing(0, 1),
+              ...theme.mixins.toolbar,
+              justifyContent: 'space-between',
+            }}>
               <Box sx={{ ml: 2, height: '40px', width: '150px', position: 'relative' }}>
                 <Image 
                   src={QuickChatImage} 
@@ -502,7 +484,7 @@ const ChatAppHomepage = () => {
               <IconButton onClick={handleDrawerToggle}>
                 <Menu />
               </IconButton>
-            </DrawerHeader>
+            </Box>
             <Divider />
             <SidebarContent 
               chats={chats} 
@@ -518,7 +500,13 @@ const ChatAppHomepage = () => {
             }}
             open
           >
-            <DrawerHeader>
+            <Box sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              padding: theme.spacing(0, 1),
+              ...theme.mixins.toolbar,
+              justifyContent: 'space-between',
+            }}>
               <Box sx={{ ml: 2, height: '40px', width: '120px', position: 'relative' }}>
                 <Image 
                   src={QuickChatImage} 
@@ -530,7 +518,7 @@ const ChatAppHomepage = () => {
               <IconButton>
                 <MoreVert />
               </IconButton>
-            </DrawerHeader>
+            </Box>
             <Divider />
             <SidebarContent 
               chats={chats} 
@@ -548,11 +536,35 @@ const ChatAppHomepage = () => {
             p: 3,
             width: { sm: `calc(100% - ${drawerWidth}px)` },
             height: '100vh',
-            backgroundColor: theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
+            backgroundColor: theme.palette.background.default,
           }}
         >
           <Toolbar />
-          {selectedChat ? (
+          {isLoading ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: 'calc(100vh - 64px)',
+              }}
+            >
+              <Typography variant="h6">Loading users...</Typography>
+            </Box>
+          ) : error ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: 'calc(100vh - 64px)',
+              }}
+            >
+              <Typography variant="h6" color="error">
+                Error loading users: {error.message}
+              </Typography>
+            </Box>
+          ) : selectedChat ? (
             <Box
               sx={{
                 display: 'flex',
@@ -639,6 +651,4 @@ const ChatAppHomepage = () => {
       </Box>
     </ThemeProvider>
   );
-};
-
-export default ChatAppHomepage;
+}

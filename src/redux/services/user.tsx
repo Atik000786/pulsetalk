@@ -60,5 +60,16 @@ export const loginAsync = createAsyncThunk(
     })
 );
 
+export const getAllUserAsync = createAsyncThunk(
+  "/user/all-user",
+  async (data: object, toolkit) =>
+    AxiosClient({
+      toolkit,
+      url: "/user/all-user",
+      method: "get",
+      data,
+    })
+);
+
 
 
