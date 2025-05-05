@@ -10,6 +10,7 @@ interface User {
 }
 
 interface UsersState {
+  currentUser: any;
   isSubmitting: boolean;
   isLoading: boolean;
   user: User | null;
@@ -23,10 +24,11 @@ interface ErrorResponse {
 }
 
 const initialState: UsersState = {
-  isSubmitting: false,
-  isLoading: false,
-  user: null,
-  error: null
+    isSubmitting: false,
+    isLoading: false,
+    user: null,
+    error: null,
+    currentUser: undefined
 };
 
 const usersSlice = createSlice({

@@ -104,7 +104,7 @@ const LoginPage = () => {
       if (loginAsync.fulfilled.match(response)) {
         // Store auth token and user data in localStorage
         if (response.payload.data?.token) {
-          localStorage.setItem('authToken', response.payload.data.token);
+          localStorage.setItem('token', response.payload.data.token);
           
           if (response.payload.data?.user) {
             localStorage.setItem('userData', JSON.stringify(response.payload.data.user));

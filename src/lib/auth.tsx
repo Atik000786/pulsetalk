@@ -1,4 +1,4 @@
 export const isUserLoggedIn = (): boolean => {
   if (typeof window === 'undefined') return false;
-  return !!localStorage.getItem('authToken');
+  return !!localStorage.getItem('token');
 };
