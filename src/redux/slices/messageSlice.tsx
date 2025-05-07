@@ -1,14 +1,23 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice } from '@reduxjs/toolkit';
 import {
   sendMessageAsync,
   getMessageAsync,
-  getChatListAsync
-} from "../services/message";
+  getChatListAsync,
+  markMessagesAsRead,
+} from '../services/message';
 
 interface Message {
   _id: string;
-  sender: string; // or User if you want to populate
-  receiver: string; // or User if you want to populate
+  sender: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+  };
+  receiver: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+  };
   content: string;
   isRead: boolean;
   readAt?: Date;
@@ -16,6 +25,7 @@ interface Message {
   status: 'sent' | 'delivered' | 'read';
   createdAt: Date;
   updatedAt: Date;
+  __v: number;
 }
 
 interface Chat {
@@ -30,9 +40,16 @@ interface MessagesState {
   isSubmitting: boolean;
   isLoading: boolean;
   isLoadingChats: boolean;
-  messages: Message[];
+  messages: {
+    success: boolean;
+    status: number;
+    message: string;
+    data: Message[];
+  } | null;
   chats: Chat[];
   error: ErrorResponse | null;
+  isTyping: Record<string, boolean>;
+  onlineUsers: string[];
 }
 
 interface ErrorResponse {
@@ -45,17 +62,42 @@ const initialState: MessagesState = {
   isSubmitting: false,
   isLoading: false,
   isLoadingChats: false,
-  messages: [],
+  messages: null,
   chats: [],
-  error: null
+  error: null,
+  isTyping: {},
+  onlineUsers: [],
 };
 
 const messagesSlice = createSlice({
-  name: "messages",
+  name: 'messages',
   initialState,
-  reducers: {},
+  reducers: {
+    setTyping: (state, action: { payload: { userId: string; isTyping: boolean } }) => {
+      state.isTyping[action.payload.userId] = action.payload.isTyping;
+    },
+    setUserOnline: (state, action: { payload: { userId: string } }) => {
+      if (!state.onlineUsers.includes(action.payload.userId)) {
+        state.onlineUsers.push(action.payload.userId);
+      }
+    },
+    setUserOffline: (state, action: { payload: { userId: string } }) => {
+      state.onlineUsers = state.onlineUsers.filter((id) => id !== action.payload.userId);
+    },
+    updateMessageStatus: (
+      state,
+      action: { payload: { messageId: string; status: 'sent' | 'delivered' | 'read' } }
+    ) => {
+      if (state.messages?.data) {
+        state.messages.data = state.messages.data.map((msg) =>
+          msg._id === action.payload.messageId
+            ? { ...msg, status: action.payload.status, isRead: action.payload.status === 'read' }
+            : msg
+        );
+      }
+    },
+  },
   extraReducers: (builder) => {
-    // send message
     builder
       .addCase(sendMessageAsync.pending, (state) => {
         state.isSubmitting = true;
@@ -63,41 +105,64 @@ const messagesSlice = createSlice({
       })
       .addCase(sendMessageAsync.fulfilled, (state, action) => {
         state.isSubmitting = false;
-        state.messages.push(action.payload);
+        if (state.messages?.data) {
+          state.messages.data.push(action.payload.data);
+        } else {
+          state.messages = {
+            success: true,
+            status: 200,
+            message: 'Message sent',
+            data: [action.payload.data],
+          };
+        }
       })
       .addCase(sendMessageAsync.rejected, (state, action) => {
         state.isSubmitting = false;
         state.error = action.payload as ErrorResponse;
       })
-      
-      // get messages
       .addCase(getMessageAsync.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(getMessageAsync.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.messages = action.payload; // assuming payload is an array of messages
+        state.messages = action.payload;
       })
       .addCase(getMessageAsync.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as ErrorResponse;
       })
-      
-      // get chat list
       .addCase(getChatListAsync.pending, (state) => {
         state.isLoadingChats = true;
         state.error = null;
       })
       .addCase(getChatListAsync.fulfilled, (state, action) => {
         state.isLoadingChats = false;
-        state.chats = action.payload; // assuming payload is an array of chats
+        state.chats = action.payload;
       })
       .addCase(getChatListAsync.rejected, (state, action) => {
         state.isLoadingChats = false;
         state.error = action.payload as ErrorResponse;
+      })
+      .addCase(markMessagesAsRead.fulfilled, (state, action) => {
+        if (state.messages?.data) {
+          state.messages.data = state.messages.data.map((msg) =>
+            msg.sender._id === action.meta.arg.senderId &&
+            msg.receiver._id === action.meta.arg.receiverId &&
+            !msg.isRead
+              ? { ...msg, isRead: true, status: 'read' }
+              : msg
+          );
+        }
+        state.chats = state.chats.map((chat) =>
+          chat.participants.includes(action.meta.arg.senderId) &&
+          chat.participants.includes(action.meta.arg.receiverId)
+            ? { ...chat, unreadCount: 0 }
+            : chat
+        );
       });
-  }
+  },
 });
 
+export const { setTyping, setUserOnline, setUserOffline, updateMessageStatus } = messagesSlice.actions;
 export default messagesSlice.reducer;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import QuickChatImage from '../../../public/images/QuickChat.png';
 import QuickChatIcon from '../../../public/images/QuickChaticon.png';
@@ -31,6 +31,7 @@ import {
   Drawer,
   ThemeProvider,
   createTheme,
+  CircularProgress,
 } from '@mui/material';
 import {
   Menu,
@@ -48,9 +49,10 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '@/redux/store';
 import { getAllUserAsync } from '@/redux/services/user';
-import { sendMessageAsync, getMessageAsync } from '@/redux/services/message';
+import { sendMessageAsync, getMessageAsync, markMessagesAsRead } from '@/redux/services/message';
 import { LoadingButton } from '@mui/lab';
 import toast from 'react-hot-toast';
+import io, { Socket } from 'socket.io-client';
 import React from 'react';
 
 // TypeScript types
@@ -86,19 +88,7 @@ type Chat = {
   time: string;
   unread: number;
   avatar: string;
-};
-
-type Message = {
-  id: string;
-  text: string;
-  sender: string; // 'me' or 'other'
-  time: string;
-  status: 'sent' | 'delivered' | 'read';
-  isRead?: boolean;
-  senderDetails?: {
-    firstName: string;
-    lastName: string;
-  };
+  isOnline: boolean;
 };
 
 type ApiMessage = {
@@ -117,9 +107,23 @@ type ApiMessage = {
   isRead: boolean;
   messageType: string;
   status: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
   __v: number;
+};
+
+type Message = {
+  id: string;
+  text: string;
+  sender: string;
+  time: string;
+  status: 'sent' | 'delivered' | 'read';
+  isRead?: boolean;
+  __v?: number;
+  senderDetails?: {
+    firstName: string;
+    lastName: string;
+  };
 };
 
 type ApiMessagesResponse = {
@@ -127,13 +131,6 @@ type ApiMessagesResponse = {
   status: number;
   message: string;
   data: ApiMessage[];
-};
-
-type MessageState = {
-  messages: ApiMessagesResponse | null;
-  isLoading: boolean;
-  isSubmitting: boolean;
-  error: string | null;
 };
 
 type ThemeMode = 'light' | 'dark';
@@ -144,14 +141,14 @@ const getDesignTokens = (mode: ThemeMode) => ({
     ...(mode === 'light'
       ? {
           primary: {
-            main: '#1976d2',
+            main: '#075E54',
           },
           secondary: {
-            main: '#9c27b0',
+            main: '#25D366',
           },
           background: {
-            default: '#fafafa',
-            paper: '#ffffff',
+            default: '#E5DDD5',
+            paper: '#FFFFFF',
           },
           text: {
             primary: 'rgba(0, 0, 0, 0.87)',
@@ -160,17 +157,17 @@ const getDesignTokens = (mode: ThemeMode) => ({
         }
       : {
           primary: {
-            main: '#90caf9',
+            main: '#075E54',
           },
           secondary: {
-            main: '#ce93d8',
+            main: '#25D366',
           },
           background: {
-            default: '#121212',
-            paper: '#1e1e1e',
+            default: '#0B141A',
+            paper: '#121212',
           },
           text: {
-            primary: '#ffffff',
+            primary: '#FFFFFF',
             secondary: 'rgba(255, 255, 255, 0.7)',
           },
         }),
@@ -191,7 +188,7 @@ const MessageInputContainer = styled(Paper)(({ theme }) => ({
   alignItems: 'center',
   padding: '8px 16px',
   borderRadius: theme.shape.borderRadius * 2,
-  backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#f5f5f5',
+  backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#F0F2F5',
   marginTop: theme.spacing(2),
 }));
 
@@ -213,11 +210,12 @@ const Message = ({ message }: { message: Message }) => {
           borderRadius: 4,
           backgroundColor:
             message.sender === 'me'
-              ? theme.palette.primary.main
+              ? '#DCF8C6'
               : theme.palette.mode === 'dark'
               ? '#333'
-              : '#e5e5ea',
-          color: message.sender === 'me' ? '#fff' : theme.palette.text.primary,
+              : '#FFFFFF',
+          color: message.sender === 'me' ? '#000' : theme.palette.text.primary,
+          boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)',
         }}
       >
         {message.sender === 'other' && (
@@ -231,13 +229,13 @@ const Message = ({ message }: { message: Message }) => {
             variant="caption"
             sx={{
               mr: 1,
-              color: message.sender === 'me' ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+              color: message.sender === 'me' ? 'rgba(0,0,0,0.6)' : 'text.secondary',
             }}
           >
             {message.time}
           </Typography>
           {message.sender === 'me' && message.status && (
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+            <Typography variant="caption" sx={{ color: message.status === 'read' ? '#34B7F1' : 'rgba(0,0,0,0.6)' }}>
               {message.status === 'sent' ? '✓' : message.status === 'delivered' ? '✓✓' : '✓✓✓'}
             </Typography>
           )}
@@ -268,7 +266,7 @@ const SidebarContent = React.memo(
             display: 'flex',
             alignItems: 'center',
             borderRadius: theme.shape.borderRadius,
-            backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#f5f5f5',
+            backgroundColor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#F0F2F5',
             margin: theme.spacing(2),
             width: '100%',
           }}
@@ -294,19 +292,37 @@ const SidebarContent = React.memo(
                   selectedChat === chat.id
                     ? theme.palette.mode === 'dark'
                       ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)'
+                      : '#EBF5FB'
                     : 'transparent',
                 '&:hover': {
                   backgroundColor:
                     theme.palette.mode === 'dark'
                       ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)',
+                      : '#F0F2F5',
                 },
               }}
             >
               <ListItemButton>
                 <ListItemAvatar>
-                  <Avatar alt={chat.name} src={chat.avatar} />
+                  <Badge
+                    overlap="circular"
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    badgeContent={
+                      chat.isOnline ? (
+                        <Box
+                          sx={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            backgroundColor: '#25D366',
+                            border: `2px solid ${theme.palette.background.paper}`,
+                          }}
+                        />
+                      ) : null
+                    }
+                  >
+                    <Avatar alt={chat.name} src={chat.avatar} />
+                  </Badge>
                 </ListItemAvatar>
                 <ListItemText
                   primary={chat.name}
@@ -328,7 +344,7 @@ const SidebarContent = React.memo(
                   {chat.unread > 0 && (
                     <Box
                       sx={{
-                        bgcolor: 'primary.main',
+                        bgcolor: 'secondary.main',
                         color: 'white',
                         borderRadius: '50%',
                         width: 20,
@@ -384,18 +400,122 @@ export default function ChatAppHomepage() {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentUserId] = useState<string>('6812361cc0bd4b78bbfbd24d');
+  const [isTyping, setIsTyping] = useState<Record<string, boolean>>({});
+  const socketRef = useRef<Socket | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const router = useRouter();
   const dispatch: AppDispatch = useDispatch();
   const { isLoading, error } = useSelector((state: RootState) => state.users);
   const usersData = useSelector((state: RootState) => state.users.user) as ApiUserResponse | null;
-  const messageState = useSelector((state: RootState) => state.message) as unknown as MessageState;
+  const messageState = useSelector((state: RootState) => state.message);
+  const { isTyping: typingUsers, onlineUsers } = useSelector((state: RootState) => state.message);
 
-  // Create theme based on themeMode
   const theme = useMemo(() => {
     const validMode: ThemeMode = themeMode === 'dark' ? 'dark' : 'light';
     return createTheme(getDesignTokens(validMode));
   }, [themeMode]);
+
+  // Initialize Socket.IO
+  useEffect(() => {
+    const token = localStorage.getItem('token') || 'your-jwt-token';
+    socketRef.current = io('http://localhost:9000', {
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log('Connected to Socket.IO server');
+      socketRef.current?.emit('join', currentUserId);
+    });
+
+    socketRef.current.on('newMessage', (message: ApiMessage) => {
+      if (message.sender._id !== currentUserId && message.receiver._id === currentUserId) {
+        // Ensure createdAt is a Date object
+        const createdAt = typeof message.createdAt === 'string' ? new Date(message.createdAt) : message.createdAt;
+        const transformedMessage: Message = {
+          id: message._id,
+          text: message.content,
+          sender: 'other',
+          time: createdAt instanceof Date && !isNaN(createdAt.getTime())
+            ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Invalid time',
+          status: message.status as 'sent' | 'delivered' | 'read',
+          isRead: message.isRead,
+          __v: message.__v,
+          senderDetails: {
+            firstName: message.sender.firstName,
+            lastName: message.sender.lastName,
+          },
+        };
+
+        setMessages((prev) => ({
+          ...prev,
+          [message.sender._id]: [...(prev[message.sender._id] || []), transformedMessage],
+        }));
+
+        setChats((prevChats) => {
+          const chatIndex = prevChats.findIndex((c) => c.id === message.sender._id);
+          if (chatIndex === -1) return prevChats;
+          const updatedChats = [...prevChats];
+          updatedChats[chatIndex] = {
+            ...updatedChats[chatIndex],
+            lastMessage: message.content.substring(0, 30) + (message.content.length > 30 ? '...' : ''),
+            time: 'Just now',
+            unread: message.isRead ? 0 : updatedChats[chatIndex].unread + 1,
+          };
+          return updatedChats;
+        });
+
+        // Mark messages as read if the chat is open
+        if (selectedChat === message.sender._id) {
+          socketRef.current?.emit('markAsRead', {
+            senderId: message.sender._id,
+            receiverId: currentUserId,
+          });
+          dispatch(markMessagesAsRead({ senderId: message.sender._id, receiverId: currentUserId }));
+        }
+      }
+    });
+
+    socketRef.current.on('typing-indicator', ({ senderId, isTyping }: { senderId: string; isTyping: boolean }) => {
+      setIsTyping((prev) => ({ ...prev, [senderId]: isTyping }));
+    });
+
+    socketRef.current.on('user-online', ({ userId }: { userId: string }) => {
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === userId ? { ...chat, isOnline: true } : chat
+        )
+      );
+    });
+
+    socketRef.current.on('user-offline', ({ userId }: { userId: string }) => {
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === userId ? { ...chat, isOnline: false } : chat
+        )
+      );
+    });
+
+    socketRef.current.on('messageStatus', ({ messageId, status }: { messageId: string; status: string }) => {
+      setMessages((prev) => {
+        const updatedMessages = { ...prev };
+        Object.keys(updatedMessages).forEach((chatId) => {
+          updatedMessages[chatId] = updatedMessages[chatId].map((msg) =>
+            msg.id === messageId ? { ...msg, status: status as 'sent' | 'delivered' | 'read' } : msg
+          );
+        });
+        return updatedMessages;
+      });
+    });
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, [currentUserId, selectedChat, dispatch]);
 
   // Fetch users
   useEffect(() => {
@@ -412,17 +532,24 @@ export default function ChatAppHomepage() {
         time: '',
         unread: 0,
         avatar: `https://i.pravatar.cc/150?u=${user.email}`,
+        isOnline: onlineUsers.includes(user._id),
       }));
       setChats(transformedChats);
     }
-  }, [usersData]);
+  }, [usersData, onlineUsers]);
 
   // Fetch messages for selected chat
   useEffect(() => {
     if (selectedChat) {
       dispatch(getMessageAsync({ userId: selectedChat }));
+      // Mark messages as read when opening a chat
+      socketRef.current?.emit('markAsRead', {
+        senderId: selectedChat,
+        receiverId: currentUserId,
+      });
+      dispatch(markMessagesAsRead({ senderId: selectedChat, receiverId: currentUserId }));
     }
-  }, [selectedChat, dispatch]);
+  }, [selectedChat, dispatch, currentUserId]);
 
   // Transform and update messages
   useEffect(() => {
@@ -430,13 +557,18 @@ export default function ChatAppHomepage() {
       const apiMessages = messageState.messages.data;
       const transformedMessages = apiMessages.map((msg: ApiMessage) => {
         const isSenderMe = msg.sender._id === currentUserId;
+        // Ensure createdAt is a Date object
+        const createdAt = typeof msg.createdAt === 'string' ? new Date(msg.createdAt) : msg.createdAt;
         return {
           id: msg._id,
           text: msg.content,
           sender: isSenderMe ? 'me' : 'other',
-          time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: createdAt instanceof Date && !isNaN(createdAt.getTime())
+            ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Invalid time',
           status: msg.status as 'sent' | 'delivered' | 'read',
           isRead: msg.isRead,
+          __v: msg.__v,
           senderDetails: !isSenderMe
             ? {
                 firstName: msg.sender.firstName,
@@ -451,9 +583,10 @@ export default function ChatAppHomepage() {
         [selectedChat]: transformedMessages,
       }));
 
-      // Update last message in chats only if there are messages
       if (apiMessages.length > 0) {
         const lastMessage = apiMessages[apiMessages.length - 1];
+        // Ensure lastMessage.createdAt is a Date object
+        const lastMessageCreatedAt = typeof lastMessage.createdAt === 'string' ? new Date(lastMessage.createdAt) : lastMessage.createdAt;
         setChats((prevChats) => {
           const chatIndex = prevChats.findIndex((c) => c.id === selectedChat);
           if (chatIndex === -1) return prevChats;
@@ -461,7 +594,9 @@ export default function ChatAppHomepage() {
           updatedChats[chatIndex] = {
             ...updatedChats[chatIndex],
             lastMessage: lastMessage.content.substring(0, 30) + (lastMessage.content.length > 30 ? '...' : ''),
-            time: new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: lastMessageCreatedAt instanceof Date && !isNaN(lastMessageCreatedAt.getTime())
+              ? lastMessageCreatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Invalid time',
             unread: lastMessage.sender._id !== currentUserId && !lastMessage.isRead ? 1 : 0,
           };
           return updatedChats;
@@ -469,6 +604,27 @@ export default function ChatAppHomepage() {
       }
     }
   }, [messageState.messages, selectedChat, currentUserId]);
+
+  // Handle typing
+  const handleTyping = useCallback(() => {
+    if (!selectedChat || !socketRef.current) return;
+
+    socketRef.current.emit('typing', {
+      receiverId: selectedChat,
+      isTyping: true,
+    });
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current?.emit('typing', {
+        receiverId: selectedChat,
+        isTyping: false,
+      });
+    }, 3000);
+  }, [selectedChat]);
 
   const handleDrawerToggle = useCallback(() => {
     setMobileOpen((prev) => !prev);
@@ -555,12 +711,17 @@ export default function ChatAppHomepage() {
     }
   }, [message, selectedChat, dispatch]);
 
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  }, [handleSendMessage]);
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      } else {
+        handleTyping();
+      }
+    },
+    [handleSendMessage, handleTyping]
+  );
 
   const drawerWidth = 340;
 
@@ -573,6 +734,7 @@ export default function ChatAppHomepage() {
           sx={{
             width: { sm: `calc(100% - ${drawerWidth}px)` },
             ml: { sm: `${drawerWidth}px` },
+            backgroundColor: theme.palette.primary.main,
           }}
         >
           <Toolbar>
@@ -587,13 +749,20 @@ export default function ChatAppHomepage() {
             </IconButton>
             {selectedChat && (
               <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                <Avatar 
-                  src={chats.find((c) => c.id === selectedChat)?.avatar} 
+                <Avatar
+                  src={chats.find((c) => c.id === selectedChat)?.avatar}
                   sx={{ mr: 2 }}
                 />
-                <Typography variant="h6" noWrap component="div">
-                  {chats.find((c) => c.id === selectedChat)?.name}
-                </Typography>
+                <Box>
+                  <Typography variant="h6" noWrap component="div">
+                    {chats.find((c) => c.id === selectedChat)?.name}
+                  </Typography>
+                  {isTyping[selectedChat] && (
+                    <Typography variant="caption" color="inherit">
+                      Typing...
+                    </Typography>
+                  )}
+                </Box>
               </Box>
             )}
             {!selectedChat && (
@@ -639,6 +808,7 @@ export default function ChatAppHomepage() {
                 padding: theme.spacing(0, 1),
                 ...theme.mixins.toolbar,
                 justifyContent: 'space-between',
+                backgroundColor: theme.palette.primary.main,
               }}
             >
               <Box sx={{ ml: 2, height: '40px', width: '150px', position: 'relative' }}>
@@ -649,7 +819,7 @@ export default function ChatAppHomepage() {
                   style={{ objectFit: 'contain' }}
                 />
               </Box>
-              <IconButton onClick={handleDrawerToggle}>
+              <IconButton onClick={handleDrawerToggle} color="inherit">
                 <Menu />
               </IconButton>
             </Box>
@@ -675,6 +845,7 @@ export default function ChatAppHomepage() {
                 padding: theme.spacing(0, 1),
                 ...theme.mixins.toolbar,
                 justifyContent: 'space-between',
+                backgroundColor: theme.palette.primary.main,
               }}
             >
               <Box sx={{ ml: 2, height: '40px', width: '120px', position: 'relative' }}>
@@ -685,7 +856,7 @@ export default function ChatAppHomepage() {
                   style={{ objectFit: 'contain' }}
                 />
               </Box>
-              <IconButton>
+              <IconButton color="inherit">
                 <MoreVert />
               </IconButton>
             </Box>
@@ -718,7 +889,7 @@ export default function ChatAppHomepage() {
                 height: 'calc(100vh - 64px)',
               }}
             >
-              <Typography variant="h6">Loading users...</Typography>
+              <CircularProgress />
             </Box>
           ) : error ? (
             <Box
@@ -741,7 +912,6 @@ export default function ChatAppHomepage() {
                 height: 'calc(100vh - 64px)',
               }}
             >
-              {/* Messages area */}
               <Box
                 sx={{
                   flexGrow: 1,
@@ -753,7 +923,7 @@ export default function ChatAppHomepage() {
               >
                 {messageState.isLoading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                    <Typography variant="body1">Loading messages...</Typography>
+                    <CircularProgress />
                   </Box>
                 ) : (
                   (messages[selectedChat] || []).map((msg) => (
@@ -762,7 +932,6 @@ export default function ChatAppHomepage() {
                 )}
               </Box>
 
-              {/* Message input area */}
               <MessageInputContainer elevation={1}>
                 <IconButton>
                   <AttachFile />
