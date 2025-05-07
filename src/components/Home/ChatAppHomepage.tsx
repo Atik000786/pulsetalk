@@ -419,7 +419,7 @@ export default function ChatAppHomepage() {
   // Initialize Socket.IO
   useEffect(() => {
     const token = localStorage.getItem('token') || 'your-jwt-token';
-    socketRef.current = io('http://localhost:9000', {
+    socketRef.current = io(process.env.NEXT_PUBLIC_API_URL, {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
