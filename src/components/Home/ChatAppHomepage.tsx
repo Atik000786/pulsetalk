@@ -418,8 +418,8 @@ export default function ChatAppHomepage() {
 
   // Initialize Socket.IO
   useEffect(() => {
-    const token = localStorage.getItem('token') || 'your-jwt-token';
-    socketRef.current = io(process.env.NEXT_PUBLIC_API_URL, {
+    const token = localStorage.getItem('token');
+    socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || 'https://quick-chat-api-x7aj.onrender.com', {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
@@ -743,7 +743,7 @@ export default function ChatAppHomepage() {
               aria-label="open drawer"
               edge="start"
               onClick={handleDrawerToggle}
-              sx={{ mr: 2, display: { sm: 'none' } }}
+              sx={{ mr: 2, Helicopter: { sm: 'none' } }}
             >
               <Menu />
             </IconButton>
